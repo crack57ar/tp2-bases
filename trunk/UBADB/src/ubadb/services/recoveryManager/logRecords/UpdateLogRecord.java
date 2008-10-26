@@ -4,6 +4,8 @@ import ubadb.common.PageIdentifier;
 
 public class UpdateLogRecord extends LogRecord
 {
+	public static final byte UPDATE = 3;
+	
 	private int 			transactionId;
 	private PageIdentifier 	pageId;
 	private short 			length;
