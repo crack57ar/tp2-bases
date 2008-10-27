@@ -1,21 +1,19 @@
 package ubadb.services.recoveryManager;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import sun.rmi.runtime.Log;
+
 import ubadb.common.PageIdentifier;
+import ubadb.components.DBComponentsEnum;
+import ubadb.components.properties.DBProperties;
+import ubadb.dbserver.DBFactory;
 import ubadb.logger.DBLogger;
 import ubadb.services.DBService;
 import ubadb.services.exceptions.DBServiceException;
 import ubadb.services.recoveryManager.exceptions.RecoveryManagerException;
-import ubadb.services.recoveryManager.logRecords.AbortLogRecord;
-import ubadb.services.recoveryManager.logRecords.BeginLogRecord;
-import ubadb.services.recoveryManager.logRecords.CommitLogRecord;
-import ubadb.services.recoveryManager.logRecords.LogRecord;
-import ubadb.services.recoveryManager.logRecords.UpdateLogRecord;
+import ubadb.services.recoveryManager.logRecords.*;
 
 /**
  *	Módulo de "Recuperación ante fallas" 
@@ -24,13 +22,16 @@ public class RecoveryManager extends DBService
 {
 	//[start] Atributos
 	private List<LogRecord> logRecordsInMemory;
+	private int maxLogRecord = ((DBProperties)DBFactory.getComponents().get(DBComponentsEnum.PROPERTIES)).RecoveryManagerMaxLogRecordsInMemory();
 	//[end]
 	
 	//[start] Constructor
 	public RecoveryManager()
 	{
-		//TODO: Completar
-		logRecordsInMemory = new ArrayList<LogRecord>();
+		String logFileName = ((DBProperties)DBFactory.getComponents().get(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
+		//tomo el log de disco y lo traigo a memoria.
+		logRecordsInMemory = ParseLog.getFromFile(logFileName);
+		
 	}
 	//[end]
 	
@@ -44,6 +45,7 @@ public class RecoveryManager extends DBService
 	 */
 	public void addLogRecord(LogRecord logRecord) throws RecoveryManagerException
 	{
+		
 		//TODO: Completar
 	}
 	//[end]
@@ -79,9 +81,30 @@ public class RecoveryManager extends DBService
 	/**
 	 *	Recorre el log del disco, armando las 3 listas más el diccionario con las acciones de cada transacción 
 	 */
-	private void analyzeLog(Map<Long, List<LogRecord>> transactionRecords, List<Long> unfinishedTransactionIds, List<Long> abortedTransactionIds, List<Long> committedTransactionIds)
+	private void analyzeLog(Map<Integer, List<LogRecord>> transactionRecords, List<Integer> unfinishedTransactionIds, List<Integer> abortedTransactionIds, List<Long> committedTransactionIds)
 	{
-		//TODO: Es opcional usar este método pero está para orientar
+		for (LogRecord record : logRecordsInMemory) {
+			if(record instanceof CommitLogRecord){
+				transactionRecords.put(((CommitLogRecord)record).getTransactionId(), new ArrayList<LogRecord>());
+			}else if(record instanceof AbortLogRecord){
+				abortedTransactionIds.add(((AbortLogRecord)record).getTransactionId());
+			}else if(record instanceof UpdateLogRecord){
+				if(transactionRecords.containsKey(((UpdateLogRecord)record).getTransactionId())){
+					transactionRecords.get(((UpdateLogRecord)record).getTransactionId()).add(record);
+				}else{
+					if(unfinishedTransactionIds.contains(((UpdateLogRecord)record).getTransactionId()))
+						unfinishedTransactionIds.add(((UpdateLogRecord)record).getTransactionId());
+				}
+			}else if(record instanceof BeginLogRecord){
+				//si no es commiteada ni abortada, entonces es incompleta con solo el begin
+				if(!transactionRecords.containsKey(((BeginLogRecord)record).getTransactionId()) &&
+				   !abortedTransactionIds.contains(((BeginLogRecord)record).getTransactionId())	){
+					
+					unfinishedTransactionIds.add(((BeginLogRecord)record).getTransactionId());
+				}	
+			}
+			
+		}
 	}
 	//[end]
 	
