@@ -1,14 +1,21 @@
 package ubadb.services.recoveryManager;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import sun.rmi.runtime.Log;
 import ubadb.common.PageIdentifier;
+import ubadb.logger.DBLogger;
 import ubadb.services.DBService;
 import ubadb.services.exceptions.DBServiceException;
 import ubadb.services.recoveryManager.exceptions.RecoveryManagerException;
+import ubadb.services.recoveryManager.logRecords.AbortLogRecord;
+import ubadb.services.recoveryManager.logRecords.BeginLogRecord;
+import ubadb.services.recoveryManager.logRecords.CommitLogRecord;
 import ubadb.services.recoveryManager.logRecords.LogRecord;
+import ubadb.services.recoveryManager.logRecords.UpdateLogRecord;
 
 /**
  *	Módulo de "Recuperación ante fallas" 
@@ -59,6 +66,8 @@ public class RecoveryManager extends DBService
 	{
 		//TODO: Completar
 		//Sigo los pasos del algoritmo de recuperación UNDO/REDO sin checkpointing
+		undoTransaction(logRecordsInMemory);
+		redoTransaction(logRecordsInMemory);
 	}
 	//[end]
 	
@@ -85,6 +94,25 @@ public class RecoveryManager extends DBService
 	{
 		//Rehace cada paso de la transacción (debe usar el updatePage con la imagen nueva)
 		//TODO: Completar
+		
+		//busco todas la trans commiteadas y luego las barro haciendo todas sus acciones nuevamente.
+		List<Integer> commitedTransaction = new ArrayList<Integer>();
+		for (LogRecord logRecord : logRecords) {
+			if(logRecord instanceof CommitLogRecord ){
+				CommitLogRecord commit = (CommitLogRecord) logRecord;
+				commitedTransaction.add(commit.getTransactionId());
+			}
+		}
+		for (int i = 0; i < logRecords.size(); i++) {
+			LogRecord redoRecord = logRecords.get(i); 
+			if(redoRecord instanceof UpdateLogRecord ){
+				UpdateLogRecord update = (UpdateLogRecord) redoRecord;
+				if(commitedTransaction.contains(update.getTransactionId())){
+					updatePage(update.getTransactionId(), update.getPageId(), update.getLength(), update.getOffset(), update.getAfterImage());
+				}
+			}
+		}
+		
 	}
 	//[end]
 	
@@ -98,6 +126,28 @@ public class RecoveryManager extends DBService
 		//TODO: Completar
 		//Deshace cada paso de la transacción (debe usar el updatePage con la imagen anterior)
 		//NO pone abort en el log
+		List<Integer> finishedTransactions = new ArrayList<Integer>();
+		
+		for (LogRecord logRecord : logRecords) {
+			if(logRecord instanceof UpdateLogRecord ){
+				UpdateLogRecord update = (UpdateLogRecord)logRecord;
+				if(!finishedTransactions.contains(update.getTransactionId())){
+					updatePage(update.getTransactionId(), update.getPageId(), update.getLength(), update.getOffset(), update.getBeforeImage());
+				}
+			}else if(logRecord instanceof CommitLogRecord ){
+				CommitLogRecord commit = (CommitLogRecord) logRecord;
+				if(!finishedTransactions.contains(commit.getTransactionId())){
+					finishedTransactions.add(commit.getTransactionId());
+				}
+			}else if(logRecord instanceof AbortLogRecord ){
+				AbortLogRecord abort = (AbortLogRecord) logRecord;
+				if(!finishedTransactions.contains(abort.getTransactionId())){
+					finishedTransactions.add(abort.getTransactionId());
+				}
+			}else{
+				DBLogger.debug("El Log encontrado no es reconocido por el sistema: "+logRecord.getClass());
+			}
+		}
 	}
 	//[end]
 
