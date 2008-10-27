@@ -23,15 +23,14 @@ public class RecoveryManager extends DBService
 	//[start] Atributos
 	private List<LogRecord> logRecordsInMemory;
 	private int maxLogRecord = ((DBProperties)DBFactory.getComponents().get(DBComponentsEnum.PROPERTIES)).RecoveryManagerMaxLogRecordsInMemory();
+	private String logFileName = ((DBProperties)DBFactory.getComponents().get(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
 	//[end]
 	
 	//[start] Constructor
 	public RecoveryManager()
 	{
-		String logFileName = ((DBProperties)DBFactory.getComponents().get(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
 		//tomo el log de disco y lo traigo a memoria.
-		logRecordsInMemory = ParseLog.getFromFile(logFileName);
-		
+		logRecordsInMemory = ParseLog.getFromFile(logFileName);	
 	}
 	//[end]
 	
@@ -45,8 +44,10 @@ public class RecoveryManager extends DBService
 	 */
 	public void addLogRecord(LogRecord logRecord) throws RecoveryManagerException
 	{
-		
-		//TODO: Completar
+		if(logRecordsInMemory.size() > maxLogRecord){
+			flushLog();
+		}
+		logRecordsInMemory.add(logRecord);
 	}
 	//[end]
 
@@ -56,7 +57,8 @@ public class RecoveryManager extends DBService
 	 */
 	public void flushLog() throws RecoveryManagerException
 	{
-		//TODO: Completar 
+		ParseLog.saveToFile(logRecordsInMemory, logFileName);
+		logRecordsInMemory = new ArrayList<LogRecord>();
 	}
 	//[end]
 	
@@ -79,8 +81,11 @@ public class RecoveryManager extends DBService
 	
 	//[start] 	analyzeLog
 	/**
-	 *	Recorre el log del disco, armando las 3 listas más el diccionario con las acciones de cada transacción 
+	 *	Recorre el log del disco, armando las 3 listas más el diccionario con las acciones de cada transacción
+	 *
+	 *  $$ Metodo al dope $$
 	 */
+	@Deprecated
 	private void analyzeLog(Map<Integer, List<LogRecord>> transactionRecords, List<Integer> unfinishedTransactionIds, List<Integer> abortedTransactionIds, List<Long> committedTransactionIds)
 	{
 		for (LogRecord record : logRecordsInMemory) {
@@ -120,11 +125,26 @@ public class RecoveryManager extends DBService
 		
 		//busco todas la trans commiteadas y luego las barro haciendo todas sus acciones nuevamente.
 		List<Integer> commitedTransaction = new ArrayList<Integer>();
+		List<Integer> abortedTransaction = new ArrayList<Integer>();
+		List<Integer> incompleteTransaction = new ArrayList<Integer>();
+		
 		for (LogRecord logRecord : logRecords) {
 			if(logRecord instanceof CommitLogRecord ){
 				CommitLogRecord commit = (CommitLogRecord) logRecord;
 				commitedTransaction.add(commit.getTransactionId());
+			}else if(logRecord instanceof AbortLogRecord){
+				AbortLogRecord abort = (AbortLogRecord) logRecord;
+				abortedTransaction.add(abort.getTransactionId());
+			}else if(logRecord instanceof UpdateLogRecord){
+				UpdateLogRecord update = (UpdateLogRecord) logRecord;
+				if(!abortedTransaction.contains(update.getTransactionId()) && !commitedTransaction.contains(update.getTransactionId()))
+					incompleteTransaction.add(update.getTransactionId());
+			}else if(logRecord instanceof BeginLogRecord){
+				BeginLogRecord begin = (BeginLogRecord) logRecord;
+				if(!abortedTransaction.contains(begin.getTransactionId()) && !commitedTransaction.contains(begin.getTransactionId()))
+					incompleteTransaction.add(begin.getTransactionId());
 			}
+			
 		}
 		for (int i = 0; i < logRecords.size(); i++) {
 			LogRecord redoRecord = logRecords.get(i); 
@@ -134,6 +154,17 @@ public class RecoveryManager extends DBService
 					updatePage(update.getTransactionId(), update.getPageId(), update.getLength(), update.getOffset(), update.getAfterImage());
 				}
 			}
+		}
+		
+		try {
+			for (Integer integer : incompleteTransaction) {
+				//agrego un abort por cada transaccion incompleta
+				addLogRecord(new AbortLogRecord(integer));
+			}
+			flushLog();
+		} catch (RecoveryManagerException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 		
 	}
