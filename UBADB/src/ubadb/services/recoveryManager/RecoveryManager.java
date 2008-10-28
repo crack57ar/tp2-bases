@@ -4,11 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-
 import ubadb.common.PageIdentifier;
 import ubadb.components.DBComponentsEnum;
 import ubadb.components.properties.DBProperties;
 import ubadb.dbserver.DBFactory;
+import ubadb.dbserver.DBServer;
 import ubadb.logger.DBLogger;
 import ubadb.services.DBService;
 import ubadb.services.exceptions.DBServiceException;
@@ -22,8 +22,9 @@ public class RecoveryManager extends DBService
 {
 	//[start] Atributos
 	private List<LogRecord> logRecordsInMemory;
-	private int maxLogRecord = ((DBProperties)DBFactory.getComponents().get(DBComponentsEnum.PROPERTIES)).RecoveryManagerMaxLogRecordsInMemory();
-	private String logFileName = ((DBProperties)DBFactory.getComponents().get(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
+	private int maxLogRecord = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerMaxLogRecordsInMemory();
+	private String logFileName = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
+	public static boolean firstWrite = true;
 	//[end]
 	
 	//[start] Constructor
@@ -59,6 +60,7 @@ public class RecoveryManager extends DBService
 	{
 		ParseLog.saveToFile(logRecordsInMemory, logFileName);
 		logRecordsInMemory = new ArrayList<LogRecord>();
+		firstWrite = false;
 	}
 	//[end]
 	
@@ -128,7 +130,8 @@ public class RecoveryManager extends DBService
 		List<Integer> abortedTransaction = new ArrayList<Integer>();
 		List<Integer> incompleteTransaction = new ArrayList<Integer>();
 		
-		for (LogRecord logRecord : logRecords) {
+		for (int i = logRecords.size()-1; i >= 0; i--) {
+			LogRecord logRecord = logRecords.get(i);
 			if(logRecord instanceof CommitLogRecord ){
 				CommitLogRecord commit = (CommitLogRecord) logRecord;
 				commitedTransaction.add(commit.getTransactionId());
@@ -141,7 +144,10 @@ public class RecoveryManager extends DBService
 					incompleteTransaction.add(update.getTransactionId());
 			}else if(logRecord instanceof BeginLogRecord){
 				BeginLogRecord begin = (BeginLogRecord) logRecord;
-				if(!abortedTransaction.contains(begin.getTransactionId()) && !commitedTransaction.contains(begin.getTransactionId()))
+				if(!abortedTransaction.contains(begin.getTransactionId()) && 
+				   !commitedTransaction.contains(begin.getTransactionId())&&
+				   !incompleteTransaction.contains(begin.getTransactionId()))
+					
 					incompleteTransaction.add(begin.getTransactionId());
 			}
 			
@@ -151,6 +157,7 @@ public class RecoveryManager extends DBService
 			if(redoRecord instanceof UpdateLogRecord ){
 				UpdateLogRecord update = (UpdateLogRecord) redoRecord;
 				if(commitedTransaction.contains(update.getTransactionId())){
+					DBLogger.debug("--> redoing change :");
 					updatePage(update.getTransactionId(), update.getPageId(), update.getLength(), update.getOffset(), update.getAfterImage());
 				}
 			}
@@ -182,10 +189,12 @@ public class RecoveryManager extends DBService
 		//NO pone abort en el log
 		List<Integer> finishedTransactions = new ArrayList<Integer>();
 		
-		for (LogRecord logRecord : logRecords) {
+		for (int i = logRecords.size()-1; i >= 0; i--) {
+			LogRecord logRecord = logRecords.get(i);
 			if(logRecord instanceof UpdateLogRecord ){
 				UpdateLogRecord update = (UpdateLogRecord)logRecord;
 				if(!finishedTransactions.contains(update.getTransactionId())){
+					DBLogger.debug("<-- undoing change :");
 					updatePage(update.getTransactionId(), update.getPageId(), update.getLength(), update.getOffset(), update.getBeforeImage());
 				}
 			}else if(logRecord instanceof CommitLogRecord ){
@@ -198,8 +207,10 @@ public class RecoveryManager extends DBService
 				if(!finishedTransactions.contains(abort.getTransactionId())){
 					finishedTransactions.add(abort.getTransactionId());
 				}
+			}else if(logRecord instanceof BeginLogRecord ){
+				
 			}else{
-				DBLogger.debug("El Log encontrado no es reconocido por el sistema: "+logRecord.getClass());
+				DBLogger.error("El Log encontrado no es reconocido por el sistema: "+logRecord.getClass());
 			}
 		}
 	}
@@ -211,6 +222,7 @@ public class RecoveryManager extends DBService
 	 */
 	private void updatePage(long transactionId, PageIdentifier pageId, int lenght, int offset, byte[] image)
 	{
+		DBLogger.debug("cambiando item de la pag. <"+pageId.getPageId()+","+pageId.getTableId()+" por la transaccion "+transactionId+".");
 		//Esta llamada quedará para completar cuando se vayan agregando diferentes módulos al sistema
 	}
 	//[end]
