@@ -24,14 +24,16 @@ public class RecoveryManager extends DBService
 	private List<LogRecord> logRecordsInMemory;
 	private int maxLogRecord = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerMaxLogRecordsInMemory();
 	private String logFileName = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
-	public static boolean firstWrite = true;
+	private int LogLength;
+	private List<Integer> commitedTransaction = new ArrayList<Integer>();
+	private List<Integer> abortedTransaction = new ArrayList<Integer>();
+	private List<Integer> incompleteTransaction = new ArrayList<Integer>();
 	//[end]
 	
 	//[start] Constructor
 	public RecoveryManager()
 	{
-		//tomo el log de disco y lo traigo a memoria.
-		logRecordsInMemory = ParseLog.getFromFile(logFileName);	
+		LogLength = ParseLog.size(logFileName);
 	}
 	//[end]
 	
@@ -45,7 +47,7 @@ public class RecoveryManager extends DBService
 	 */
 	public void addLogRecord(LogRecord logRecord) throws RecoveryManagerException
 	{
-		if(logRecordsInMemory.size() > maxLogRecord){
+		if(logRecordsInMemory.size() >= maxLogRecord){
 			flushLog();
 		}
 		logRecordsInMemory.add(logRecord);
@@ -60,7 +62,6 @@ public class RecoveryManager extends DBService
 	{
 		ParseLog.saveToFile(logRecordsInMemory, logFileName);
 		logRecordsInMemory = new ArrayList<LogRecord>();
-		firstWrite = false;
 	}
 	//[end]
 	
@@ -72,8 +73,36 @@ public class RecoveryManager extends DBService
 	{
 		//TODO: Completar
 		//Sigo los pasos del algoritmo de recuperación UNDO/REDO sin checkpointing
-		undoTransaction(logRecordsInMemory);
-		redoTransaction(logRecordsInMemory);
+		//analizo el log por partes y dejo la info en las estructuras
+		for (int i = LogLength/maxLogRecord; i >= 0 ; i--) {
+			logRecordsInMemory = ParseLog.getFromFile(logFileName,maxLogRecord*i,maxLogRecord);
+			analyzeLog(logRecordsInMemory);
+		}
+		
+		// hago el undo 
+		for (int i = LogLength/maxLogRecord; i >= 0 ; i--) {
+			logRecordsInMemory = ParseLog.getFromFile(logFileName,maxLogRecord*i,maxLogRecord);
+			undoTransaction(logRecordsInMemory);
+		}
+		
+		// hago el redo 
+		for (int i = 0; i < LogLength/maxLogRecord  ; i++) {
+			logRecordsInMemory = ParseLog.getFromFile(logFileName,maxLogRecord*i,maxLogRecord);
+			redoTransaction(logRecordsInMemory);
+		}
+		
+		logRecordsInMemory = new ArrayList<LogRecord>();
+		try {
+			for (Integer integer : incompleteTransaction) {
+				//agrego un abort por cada transaccion incompleta
+				addLogRecord(new AbortLogRecord(integer));
+			}
+			flushLog();
+		} catch (RecoveryManagerException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 	}
 	//[end]
 	
@@ -83,52 +112,13 @@ public class RecoveryManager extends DBService
 	
 	//[start] 	analyzeLog
 	/**
-	 *	Recorre el log del disco, armando las 3 listas más el diccionario con las acciones de cada transacción
+	 *	Recorre el log del disco, armando las 3 listas: commiteadas, abortadas y incompletas.
 	 *
-	 *  $$ Metodo al dope $$
 	 */
-	@Deprecated
-	private void analyzeLog(Map<Integer, List<LogRecord>> transactionRecords, List<Integer> unfinishedTransactionIds, List<Integer> abortedTransactionIds, List<Long> committedTransactionIds)
+
+	private void analyzeLog(List<LogRecord> logRecords)
 	{
-		for (LogRecord record : logRecordsInMemory) {
-			if(record instanceof CommitLogRecord){
-				transactionRecords.put(((CommitLogRecord)record).getTransactionId(), new ArrayList<LogRecord>());
-			}else if(record instanceof AbortLogRecord){
-				abortedTransactionIds.add(((AbortLogRecord)record).getTransactionId());
-			}else if(record instanceof UpdateLogRecord){
-				if(transactionRecords.containsKey(((UpdateLogRecord)record).getTransactionId())){
-					transactionRecords.get(((UpdateLogRecord)record).getTransactionId()).add(record);
-				}else{
-					if(unfinishedTransactionIds.contains(((UpdateLogRecord)record).getTransactionId()))
-						unfinishedTransactionIds.add(((UpdateLogRecord)record).getTransactionId());
-				}
-			}else if(record instanceof BeginLogRecord){
-				//si no es commiteada ni abortada, entonces es incompleta con solo el begin
-				if(!transactionRecords.containsKey(((BeginLogRecord)record).getTransactionId()) &&
-				   !abortedTransactionIds.contains(((BeginLogRecord)record).getTransactionId())	){
-					
-					unfinishedTransactionIds.add(((BeginLogRecord)record).getTransactionId());
-				}	
-			}
-			
-		}
-	}
-	//[end]
-	
-	//[start] 	redoTransaction
-	/**
-	 *	 Rehace una transacción (por ahora, el único record que se debe rehacer es el UpdateLogRecord)
-	 *	 IMPORTANTE: no hace nada con el commit
-	 */
-	private void redoTransaction(List<LogRecord> logRecords)
-	{
-		//Rehace cada paso de la transacción (debe usar el updatePage con la imagen nueva)
-		//TODO: Completar
-		
 		//busco todas la trans commiteadas y luego las barro haciendo todas sus acciones nuevamente.
-		List<Integer> commitedTransaction = new ArrayList<Integer>();
-		List<Integer> abortedTransaction = new ArrayList<Integer>();
-		List<Integer> incompleteTransaction = new ArrayList<Integer>();
 		
 		for (int i = logRecords.size()-1; i >= 0; i--) {
 			LogRecord logRecord = logRecords.get(i);
@@ -152,6 +142,20 @@ public class RecoveryManager extends DBService
 			}
 			
 		}
+	}
+	//[end]
+	
+	//[start] 	redoTransaction
+	/**
+	 *	 Rehace una transacción (por ahora, el único record que se debe rehacer es el UpdateLogRecord)
+	 *	 IMPORTANTE: no hace nada con el commit
+	 */
+	private void redoTransaction(List<LogRecord> logRecords)
+	{
+		//Rehace cada paso de la transacción (debe usar el updatePage con la imagen nueva)
+		//TODO: Completar
+		
+		
 		for (int i = 0; i < logRecords.size(); i++) {
 			LogRecord redoRecord = logRecords.get(i); 
 			if(redoRecord instanceof UpdateLogRecord ){
@@ -161,17 +165,6 @@ public class RecoveryManager extends DBService
 					updatePage(update.getTransactionId(), update.getPageId(), update.getLength(), update.getOffset(), update.getAfterImage());
 				}
 			}
-		}
-		
-		try {
-			for (Integer integer : incompleteTransaction) {
-				//agrego un abort por cada transaccion incompleta
-				addLogRecord(new AbortLogRecord(integer));
-			}
-			flushLog();
-		} catch (RecoveryManagerException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
 		}
 		
 	}
@@ -187,30 +180,15 @@ public class RecoveryManager extends DBService
 		//TODO: Completar
 		//Deshace cada paso de la transacción (debe usar el updatePage con la imagen anterior)
 		//NO pone abort en el log
-		List<Integer> finishedTransactions = new ArrayList<Integer>();
 		
 		for (int i = logRecords.size()-1; i >= 0; i--) {
 			LogRecord logRecord = logRecords.get(i);
 			if(logRecord instanceof UpdateLogRecord ){
 				UpdateLogRecord update = (UpdateLogRecord)logRecord;
-				if(!finishedTransactions.contains(update.getTransactionId())){
+				if(incompleteTransaction.contains(update.getTransactionId())){
 					DBLogger.debug("<-- undoing change :");
 					updatePage(update.getTransactionId(), update.getPageId(), update.getLength(), update.getOffset(), update.getBeforeImage());
 				}
-			}else if(logRecord instanceof CommitLogRecord ){
-				CommitLogRecord commit = (CommitLogRecord) logRecord;
-				if(!finishedTransactions.contains(commit.getTransactionId())){
-					finishedTransactions.add(commit.getTransactionId());
-				}
-			}else if(logRecord instanceof AbortLogRecord ){
-				AbortLogRecord abort = (AbortLogRecord) logRecord;
-				if(!finishedTransactions.contains(abort.getTransactionId())){
-					finishedTransactions.add(abort.getTransactionId());
-				}
-			}else if(logRecord instanceof BeginLogRecord ){
-				
-			}else{
-				DBLogger.error("El Log encontrado no es reconocido por el sistema: "+logRecord.getClass());
 			}
 		}
 	}
@@ -220,9 +198,9 @@ public class RecoveryManager extends DBService
 	/**
 	 * Actualiza la página indicada en disco
 	 */
-	private void updatePage(long transactionId, PageIdentifier pageId, int lenght, int offset, byte[] image)
+	private void updatePage(long transactionId, PageIdentifier pageId, short lenght, short offset, byte[] image)
 	{
-		DBLogger.debug("cambiando item de la pag. <"+pageId.getPageId()+","+pageId.getTableId()+" por la transaccion "+transactionId+".");
+		DBLogger.debug("cambiando item de la pag. <"+pageId.getPageId()+","+pageId.getTableId()+"> por la transaccion "+transactionId);
 		//Esta llamada quedará para completar cuando se vayan agregando diferentes módulos al sistema
 	}
 	//[end]

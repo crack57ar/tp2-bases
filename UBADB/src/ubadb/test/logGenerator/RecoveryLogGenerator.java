@@ -32,9 +32,10 @@ public class RecoveryLogGenerator
 	{
 		String outputLog = "out/RecoveryManagerLog.dat";
 		
-		List<LogRecord> records = generateRecords();
+		List<LogRecord> records;
+		//records = generateRecords();
 		
-		saveToFile(records, outputLog);
+		//saveToFile(records, outputLog);
 		
 		records = getFromFile(outputLog);
 		
@@ -48,11 +49,23 @@ public class RecoveryLogGenerator
 		
 		ret.add(new BeginLogRecord(1));
 		ret.add(new BeginLogRecord(2));
+		ret.add(new BeginLogRecord(3));
+		ret.add(new BeginLogRecord(4));
+		ret.add(new BeginLogRecord(5));
+		ret.add(new BeginLogRecord(6));
+		ret.add(new BeginLogRecord(7));//incomplete
 		
 		ret.add(new UpdateLogRecord(1,new PageIdentifier(10,20),(short)2,(short)0,new byte[]{0,0},new byte[]{1,1}));
+		ret.add(new UpdateLogRecord(6,new PageIdentifier(11,20),(short)2,(short)0,new byte[]{0,0},new byte[]{1,1}));// incomplete
+		ret.add(new UpdateLogRecord(3,new PageIdentifier(12,20),(short)2,(short)0,new byte[]{0,0},new byte[]{1,2}));// incomplete
+		ret.add(new UpdateLogRecord(4,new PageIdentifier(13,20),(short)2,(short)0,new byte[]{0,0},new byte[]{4,5}));
+		
 		
 		ret.add(new CommitLogRecord(1));
 		ret.add(new AbortLogRecord(2));
+		
+		ret.add(new AbortLogRecord(4));
+		ret.add(new AbortLogRecord(5));
 		
 		return ret;
 	}
@@ -60,9 +73,9 @@ public class RecoveryLogGenerator
 	private static void saveToFile(List<LogRecord> records, String outputLog)
 	{
 		//Escribo el arreglo de bytes de cada record en el archivo de salida
-		//new File(outputLog).delete();
+		new File(outputLog).delete();
 		try {
-			DataOutputStream stream = new DataOutputStream(new FileOutputStream(outputLog,true));
+			DataOutputStream stream = new DataOutputStream(new FileOutputStream(outputLog));
 			 for(LogRecord record : records){
 				serialize(record, stream);
 			}

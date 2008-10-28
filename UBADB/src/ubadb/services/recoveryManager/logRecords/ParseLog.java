@@ -26,7 +26,7 @@ public class ParseLog {
 		
 		saveToFile(records, outputLog);
 		
-		records = getFromFile(outputLog);
+		records = getFromFile(outputLog,0,100000);
 		
 	}
 
@@ -47,12 +47,39 @@ public class ParseLog {
 		return ret;
 	}
 
+	
+	/** 
+	 * metodo para contar el largo del archivo en cantidad de Logs.
+	 * **/
+	public static int size(String input){
+		File infile = new File(input);
+		int LogSize = 0;
+		try {
+			DataInputStream instream = new DataInputStream(new FileInputStream(infile));
+			while(deserialize(instream) != null){
+				LogSize++;
+			}
+			instream.close();
+			
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (RecoveryManagerException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return LogSize;
+	}
+	
 	public static void saveToFile(List<LogRecord> records, String outputLog)
 	{
 		//Escribo el arreglo de bytes de cada record en el archivo de salida
-		new File(outputLog).delete();
+		//new File(outputLog).delete();
 		try {
-			DataOutputStream stream = new DataOutputStream(new FileOutputStream(outputLog,!RecoveryManager.firstWrite));
+			DataOutputStream stream = new DataOutputStream(new FileOutputStream(outputLog,true));
 			 for(LogRecord record : records){
 				serialize(record, stream);
 			}
@@ -64,14 +91,20 @@ public class ParseLog {
 		}
 	}
 	
-	public static List<LogRecord> getFromFile(String input) {
+	public static List<LogRecord> getFromFile(String input, int skipLogs, int blockSize) {
 		File infile = new File(input);
 		List<LogRecord> logging = new ArrayList<LogRecord>();
 		try {
 			DataInputStream instream = new DataInputStream(new FileInputStream(infile));
 			LogRecord log;
-			while((log = deserialize(instream)) != null){
+			//salteo una cantidad de logs. Ya usados o para usar mas tarde.
+			for (int i = 0; i < skipLogs; i++){
+				deserialize(instream);
+			}
+			int j = 0;
+			while((log = deserialize(instream)) != null && j<blockSize){
 				logging.add(log);
+				j++;
 			}
 			instream.close();
 		} catch (FileNotFoundException e) {
@@ -125,7 +158,7 @@ public class ParseLog {
 		try{
 			type = instream.readByte();
 		}catch (EOFException e) {
-			DBLogger.info("final del archivo de log");
+			DBLogger.info("final del bloque de log");
 			return null;
 		}
 		if (type == BeginLogRecord.BEGIN) {
