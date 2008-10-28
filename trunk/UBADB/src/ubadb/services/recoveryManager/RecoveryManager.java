@@ -2,12 +2,10 @@ package ubadb.services.recoveryManager;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import ubadb.common.PageIdentifier;
 import ubadb.components.DBComponentsEnum;
 import ubadb.components.properties.DBProperties;
-import ubadb.dbserver.DBFactory;
 import ubadb.dbserver.DBServer;
 import ubadb.logger.DBLogger;
 import ubadb.services.DBService;
