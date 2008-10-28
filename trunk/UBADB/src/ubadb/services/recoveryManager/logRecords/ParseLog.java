@@ -13,6 +13,7 @@ import java.util.List;
 
 import ubadb.common.PageIdentifier;
 import ubadb.logger.DBLogger;
+import ubadb.services.recoveryManager.RecoveryManager;
 import ubadb.services.recoveryManager.exceptions.RecoveryManagerException;
 
 public class ParseLog {
@@ -49,9 +50,9 @@ public class ParseLog {
 	public static void saveToFile(List<LogRecord> records, String outputLog)
 	{
 		//Escribo el arreglo de bytes de cada record en el archivo de salida
-		//new File(outputLog).delete();
+		new File(outputLog).delete();
 		try {
-			DataOutputStream stream = new DataOutputStream(new FileOutputStream(outputLog,true));
+			DataOutputStream stream = new DataOutputStream(new FileOutputStream(outputLog,!RecoveryManager.firstWrite));
 			 for(LogRecord record : records){
 				serialize(record, stream);
 			}
