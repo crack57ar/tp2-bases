@@ -78,7 +78,14 @@ public class RecoveryManager extends DBService
 			logRecordsInMemory = ParseLog.getFromFile(logFileName,maxLogRecord*i,maxLogRecord);
 			analyzeLog(logRecordsInMemory);
 		}
-		
+		/**
+		 * IMPORTANTE
+		 * 
+		 * la idea aca es q como tengo un tope para subir a mem., lo q hago es subir de a cachitos y ejecutar 
+		 * cada algoritmo de a cachitos, pero si voy de principio a fin, los bloques tambien deben ser elegidos
+		 * de prin a fin, y viceversa, sino no seria consistente la forma de recorrerlo.
+		 * 
+		 **/
 		// hago el undo 
 		for (int i = LogLength/maxLogRecord; i >= 0 ; i--) {
 			logRecordsInMemory = ParseLog.getFromFile(logFileName,maxLogRecord*i,maxLogRecord);
