@@ -66,6 +66,19 @@ public class RecoveryLogGenerator
 		
 		ret.add(new AbortLogRecord(4));
 		ret.add(new AbortLogRecord(5));
+		ret.add(new BeginLogRecord(8));
+		ret.add(new BeginLogRecord(9));
+		ret.add(new BeginLogRecord(10));
+		ret.add(new BeginLogRecord(11));
+		ret.add(new BeginLogRecord(12));
+		
+		ret.add(new UpdateLogRecord(10,new PageIdentifier(10,20),(short)2,(short)0,new byte[]{0,0},new byte[]{1,1}));
+		ret.add(new UpdateLogRecord(10,new PageIdentifier(11,20),(short)2,(short)0,new byte[]{0,0},new byte[]{1,1}));
+		ret.add(new UpdateLogRecord(10,new PageIdentifier(12,20),(short)2,(short)0,new byte[]{0,0},new byte[]{1,2}));
+		ret.add(new UpdateLogRecord(10,new PageIdentifier(13,20),(short)2,(short)0,new byte[]{0,0},new byte[]{4,5}));
+		
+		ret.add(new CommitLogRecord(10));
+		
 		
 		return ret;
 	}
