@@ -20,18 +20,25 @@ public class RecoveryManager extends DBService
 {
 	//[start] Atributos
 	private List<LogRecord> logRecordsInMemory;
-	private int maxLogRecord = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerMaxLogRecordsInMemory();
-	private String logFileName = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
-	private int LogLength;
-	private List<Integer> commitedTransaction = new ArrayList<Integer>();
-	private List<Integer> abortedTransaction = new ArrayList<Integer>();
-	private List<Integer> incompleteTransaction = new ArrayList<Integer>();
+	private int maxLogRecord;
+	private String logFileName;
+	private List<LogRecord> logRecords ;
+	
+	private List<Integer> commitedTransaction;
+	private List<Integer> abortedTransaction;
+	private List<Integer> incompleteTransaction;
 	//[end]
 	
 	//[start] Constructor
 	public RecoveryManager()
 	{
-		LogLength = ParseLog.size(logFileName);
+		logRecordsInMemory = new ArrayList<LogRecord>();
+		maxLogRecord = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerMaxLogRecordsInMemory();
+		logFileName = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
+		logRecords = ParseLog.getFromFile(logFileName);
+		commitedTransaction = new ArrayList<Integer>();
+		abortedTransaction = new ArrayList<Integer>();
+		incompleteTransaction = new ArrayList<Integer>();		
 	}
 	//[end]
 	
@@ -72,39 +79,19 @@ public class RecoveryManager extends DBService
 		//TODO: Completar
 		//Sigo los pasos del algoritmo de recuperación UNDO/REDO sin checkpointing
 		//analizo el log por partes y dejo la info en las estructuras
-		for (int i = LogLength/maxLogRecord; i >= 0 ; i--) {
-			logRecordsInMemory = ParseLog.getFromFile(logFileName,maxLogRecord*i,maxLogRecord);
-			analyzeLog(logRecordsInMemory);
-		}
-		/**
-		 * IMPORTANTE
-		 * 
-		 * la idea aca es q como tengo un tope para subir a mem., lo q hago es subir de a cachitos y ejecutar 
-		 * cada algoritmo de a cachitos, pero si voy de principio a fin, los bloques tambien deben ser elegidos
-		 * de prin a fin, y viceversa, sino no seria consistente la forma de recorrerlo.
-		 * 
-		 **/
-		// hago el undo 
-		for (int i = LogLength/maxLogRecord; i >= 0 ; i--) {
-			logRecordsInMemory = ParseLog.getFromFile(logFileName,maxLogRecord*i,maxLogRecord);
-			undoTransaction(logRecordsInMemory);
-		}
-		
-		// hago el redo 
-		for (int i = 0; i < LogLength/maxLogRecord  ; i++) {
-			logRecordsInMemory = ParseLog.getFromFile(logFileName,maxLogRecord*i,maxLogRecord);
-			redoTransaction(logRecordsInMemory);
-		}
-		
-		logRecordsInMemory = new ArrayList<LogRecord>();
 		try {
+			//analizo el log para obtener las listas
+			analyzeLog(logRecords);
+			//hago el undo
+			undoTransaction(logRecords);
+			// hago el redo 
+			redoTransaction(logRecords);
+			//agrego un abort por cada transaccion incompleta 
 			for (Integer integer : incompleteTransaction) {
-				//agrego un abort por cada transaccion incompleta
 				addLogRecord(new AbortLogRecord(integer));
 			}
 			flushLog();
 		} catch (RecoveryManagerException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
@@ -159,8 +146,6 @@ public class RecoveryManager extends DBService
 	{
 		//Rehace cada paso de la transacción (debe usar el updatePage con la imagen nueva)
 		//TODO: Completar
-		
-		
 		for (int i = 0; i < logRecords.size(); i++) {
 			LogRecord redoRecord = logRecords.get(i); 
 			if(redoRecord instanceof UpdateLogRecord ){
@@ -171,7 +156,6 @@ public class RecoveryManager extends DBService
 				}
 			}
 		}
-		
 	}
 	//[end]
 	
@@ -185,7 +169,6 @@ public class RecoveryManager extends DBService
 		//TODO: Completar
 		//Deshace cada paso de la transacción (debe usar el updatePage con la imagen anterior)
 		//NO pone abort en el log
-		
 		for (int i = logRecords.size()-1; i >= 0; i--) {
 			LogRecord logRecord = logRecords.get(i);
 			if(logRecord instanceof UpdateLogRecord ){

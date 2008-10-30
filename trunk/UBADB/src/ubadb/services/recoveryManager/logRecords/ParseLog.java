@@ -26,7 +26,7 @@ public class ParseLog {
 		
 		saveToFile(records, outputLog);
 		
-		records = getFromFile(outputLog,0,100000);
+		records = getFromFile(outputLog);
 		
 	}
 
@@ -91,20 +91,14 @@ public class ParseLog {
 		}
 	}
 	
-	public static List<LogRecord> getFromFile(String input, int skipLogs, int blockSize) {
+	public static List<LogRecord> getFromFile(String input) {
 		File infile = new File(input);
 		List<LogRecord> logging = new ArrayList<LogRecord>();
 		try {
 			DataInputStream instream = new DataInputStream(new FileInputStream(infile));
 			LogRecord log;
-			//salteo una cantidad de logs. Ya usados o para usar mas tarde.
-			for (int i = 0; i < skipLogs; i++){
-				deserialize(instream);
-			}
-			int j = 0;
-			while((log = deserialize(instream)) != null && j<blockSize){
+			while((log = deserialize(instream)) != null){
 				logging.add(log);
-				j++;
 			}
 			instream.close();
 		} catch (FileNotFoundException e) {
@@ -158,7 +152,7 @@ public class ParseLog {
 		try{
 			type = instream.readByte();
 		}catch (EOFException e) {
-			DBLogger.info("final del bloque de log");
+			DBLogger.info("final del archivo de log");
 			return null;
 		}
 		if (type == BeginLogRecord.BEGIN) {
