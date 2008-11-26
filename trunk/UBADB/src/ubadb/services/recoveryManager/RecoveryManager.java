@@ -1,7 +1,9 @@
 package ubadb.services.recoveryManager;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import ubadb.common.PageIdentifier;
 import ubadb.components.DBComponentsEnum;
@@ -24,9 +26,9 @@ public class RecoveryManager extends DBService
 	private String logFileName;
 	private List<LogRecord> logRecords ;
 	
-	private List<Integer> commitedTransaction;
-	private List<Integer> abortedTransaction;
-	private List<Integer> incompleteTransaction;
+	private Set<Integer> commitedTransaction;
+	private Set<Integer> abortedTransaction;
+	private Set<Integer> incompleteTransaction;
 	//[end]
 	
 	//[start] Constructor
@@ -36,9 +38,9 @@ public class RecoveryManager extends DBService
 		maxLogRecord = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerMaxLogRecordsInMemory();
 		logFileName = ((DBProperties)DBServer.getComponent(DBComponentsEnum.PROPERTIES)).RecoveryManagerLogFileName();
 		logRecords = ParseLog.getFromFile(logFileName);
-		commitedTransaction = new ArrayList<Integer>();
-		abortedTransaction = new ArrayList<Integer>();
-		incompleteTransaction = new ArrayList<Integer>();		
+		commitedTransaction = new HashSet<Integer>();
+		abortedTransaction = new HashSet<Integer>();
+		incompleteTransaction = new HashSet<Integer>();		
 	}
 	//[end]
 	

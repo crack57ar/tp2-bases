@@ -30,7 +30,7 @@ public class RecoveryLogGenerator
 	
 	public static void main(String[] args)
 	{
-		String outputLog = "out/RecoveryManagerLog.dat";
+		String outputLog = "out/RecoveryManagerLog4.dat";
 		
 		List<LogRecord> records;
 		//records = generateRecords();
